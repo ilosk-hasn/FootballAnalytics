@@ -14,6 +14,12 @@
 
 التغطية تختلف حسب الدوري والمباراة. لا تضمن ESPN وجود الاستحواذ أو الغيابات أو التشكيلة أو الشوط الأول لكل سجل. لا تُعامل البيانات الناقصة كصفر. يحتاج الاستيراد لاتصال إنترنت؛ واجهات المصدر عامة وغير رسمية وقد تتغير أو تقيّد الطلبات.
 <img width="1185" height="792" alt="Screenshot 2026-11-09 193800" src="https://github.com/user-attachments/assets/70fcd261-85cc-4a9b-8e88-df6e3c29e5f3" />
+<img width="1185" height="792" alt="Screenshot 2026-11-09 193951" src="https://github.com/user-attachments/assets/db96a91b-c0b4-48c3-95a6-a104d86f342e" />
+<img width="1185" height="792" alt="Screenshot 2026-11-09 193822" src="https://github.com/user-attachments/assets/35ecaa06-73fb-454d-a8cb-272a6f858bc3" />
+<img width="1185" height="792" alt="Screenshot 2026-11-09 193927" src="https://github.com/user-attachments/assets/5554d7d2-97ae-4af6-9026-72e1e1b23080" />
+<img width="1185" height="792" alt="Screenshot 2026-11-09 193951" src="https://github.com/user-attachments/assets/ae440259-4991-40d1-a13e-e2ae49db0d6d" />
+
+
 
 
 ## التشغيل على Windows
