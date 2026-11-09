@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 from datetime import date
+import threading
 import customtkinter as ctk
 
 from database.database import initialize
@@ -9,6 +10,7 @@ from core.poisson import analyze
 from core.ml_model import train_and_predict
 from core.statistics import team_form
 from services.import_export import export_file, import_file
+from services.history_import import import_both
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
@@ -17,7 +19,7 @@ class FootballAnalyticsApp(ctk.CTk):
     def __init__(self):
         super().__init__()
         initialize()
-        self.title("FootballAnalytics")
+        self.title("FootballAnalytics v2.0")
         self.geometry("1180x760")
         self.minsize(980, 650)
         self.grid_columnconfigure(1, weight=1)
@@ -31,7 +33,7 @@ class FootballAnalyticsApp(ctk.CTk):
         side = ctk.CTkFrame(self, width=210, corner_radius=0)
         side.grid(row=0, column=0, sticky="nsew")
         side.grid_propagate(False)
-        ctk.CTkLabel(side, text="⚽ FootballAnalytics", font=ctk.CTkFont(size=20, weight="bold")).pack(padx=15,pady=(28,30))
+        ctk.CTkLabel(side, text="⚽ FootballAnalytics v2.0", font=ctk.CTkFont(size=20, weight="bold")).pack(padx=15,pady=(28,30))
         for label, callback in [
             ("لوحة التحكم", self.show_dashboard), ("إضافة مباراة", self.show_add),
             ("المباريات", self.show_matches), ("التحليل والتوقعات", self.show_analysis),
@@ -66,7 +68,8 @@ class FootballAnalyticsApp(ctk.CTk):
         widths={"date":100,"home":180,"score":80,"away":180,"ht":100,"competition":150}
         for c in cols: tree.heading(c,text=heads[c]); tree.column(c,width=widths[c],anchor="center")
         for m in rows:
-            tree.insert("", "end", values=(m["match_date"],m["home_team"],f'{m["home_goals"]}-{m["away_goals"]}',m["away_team"],f'{m["ht_home_goals"]}-{m["ht_away_goals"]}',m["competition"]))
+            ht = "غير متاح" if m["ht_home_goals"] is None or m["ht_away_goals"] is None else f'{m["ht_home_goals"]}-{m["ht_away_goals"]}'
+            tree.insert("", "end", values=(m["match_date"],m["home_team"],f'{m["home_goals"]}-{m["away_goals"]}',m["away_team"],ht,m["competition"]))
         tree.pack(side="left",fill="both",expand=True)
         scroll=ttk.Scrollbar(frame,orient="vertical",command=tree.yview); tree.configure(yscrollcommand=scroll.set); scroll.pack(side="right",fill="y")
         return tree
@@ -151,6 +154,52 @@ class FootballAnalyticsApp(ctk.CTk):
 
     def show_import_export(self):
         self._clear(); self._heading("استيراد وتصدير","يدعم CSV وExcel بصيغة الأعمدة الموضحة في القالب")
+        panel = ctk.CTkFrame(self.content)
+        panel.pack(fill="x", padx=22, pady=(4, 12))
+        body = ctk.CTkFrame(panel, fg_color="transparent")
+        state = {"open": False}
+        def toggle():
+            if state["open"]:
+                body.pack_forget(); toggle_btn.configure(text="＋ استيراد سجل الفريقين السابق")
+            else:
+                body.pack(fill="x", padx=12, pady=(0, 12)); toggle_btn.configure(text="－ إخفاء استيراد سجل الفريقين")
+            state["open"] = not state["open"]
+        toggle_btn = ctk.CTkButton(panel, text="＋ استيراد سجل الفريقين السابق", command=toggle, anchor="w")
+        toggle_btn.pack(fill="x", padx=10, pady=10)
+        ctk.CTkLabel(body, text="المصدر: ESPN • الطريقة: both • العدد: 20 مباراة سابقة لكل فريق. أدخل رمز المسابقة مثل eng.1 واسمَي الفريقين كما يظهران لدى المصدر.", wraplength=840, justify="left").pack(anchor="w", pady=(0, 8))
+        row = ctk.CTkFrame(body, fg_color="transparent"); row.pack(fill="x")
+        inputs = {}
+        for key, label, default in (("league", "رمز المسابقة", "eng.1"), ("home", "الفريق الأول", ""), ("away", "الفريق الثاني", "")):
+            cell = ctk.CTkFrame(row, fg_color="transparent"); cell.pack(side="left", expand=True, fill="x", padx=5)
+            ctk.CTkLabel(cell, text=label).pack(anchor="w")
+            entry = ctk.CTkEntry(cell); entry.pack(fill="x", pady=(3, 8))
+            if default: entry.insert(0, default)
+            inputs[key] = entry
+        status = ctk.CTkLabel(body, text="", text_color="gray", wraplength=840, justify="left")
+        status.pack(anchor="w", pady=5)
+        def start_history_import():
+            values = {k: v.get().strip() for k, v in inputs.items()}
+            if not values["home"] or not values["away"]:
+                messagebox.showwarning("بيانات ناقصة", "أدخل اسمَي الفريقين أولاً."); return
+            import_btn.configure(state="disabled", text="جارٍ جلب المباريات…")
+            status.configure(text="يجري البحث في سجل الفريقين وجلب تفاصيل المباريات المتاحة؛ قد يستغرق ذلك بضع دقائق.")
+            def work():
+                try: result = import_both(values["league"], values["home"], values["away"], count=20)
+                except Exception as exc: result = {"fatal": str(exc)}
+                self.after(0, lambda: finish_history_import(result))
+            threading.Thread(target=work, daemon=True).start()
+        def finish_history_import(result):
+            import_btn.configure(state="normal", text="استيراد 20 مباراة لكل فريق")
+            if result.get("fatal"):
+                status.configure(text="فشل الاستيراد: " + result["fatal"], text_color="#ff8080"); return
+            lines = [f"اكتُشفت {result['found']} مباراة فريدة؛ أُضيفت {result['added']}؛ تم تجاوز {result['skipped']} موجودة بالفعل."]
+            lines.extend(result.get("errors", []))
+            lines.append("الحقائق المتاحة وتوثيق المصدر محفوظة في ملاحظات كل مباراة. القيم غير المتاحة تبقى فارغة.")
+            status.configure(text="\n".join(lines), text_color="gray")
+        import_btn = ctk.CTkButton(body, text="استيراد 20 مباراة لكل فريق", command=start_history_import, height=40)
+        import_btn.pack(anchor="w", pady=(5, 2))
+        ctk.CTkLabel(body, text="الاستيراد يتطلب اتصالاً بالإنترنت وتختلف تغطية الإحصائيات والتشكيلات والغيابات حسب المسابقة والمباراة.", text_color="gray", wraplength=840, justify="left").pack(anchor="w", pady=(6, 0))
+        toggle()
         ctk.CTkLabel(self.content,text="الأعمدة المطلوبة: match_date, competition, home_team, away_team, home_goals, away_goals, ht_home_goals, ht_away_goals, notes",wraplength=850).pack(anchor="w",padx=22,pady=18)
         def do_import():
             path=filedialog.askopenfilename(filetypes=[("CSV / Excel","*.csv *.xlsx *.xls")])

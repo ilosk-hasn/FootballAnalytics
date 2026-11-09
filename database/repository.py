@@ -25,7 +25,8 @@ def add_match(data):
               home_goals, away_goals, ht_home_goals, ht_away_goals, notes)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (data["match_date"], comp_id, home_id, away_id, int(data["home_goals"]),
-              int(data["away_goals"]), int(data["ht_home_goals"]), int(data["ht_away_goals"]),
+              int(data["away_goals"]), int(data["ht_home_goals"]) if data.get("ht_home_goals") not in (None, "") else None,
+              int(data["ht_away_goals"]) if data.get("ht_away_goals") not in (None, "") else None,
               data.get("notes", "")))
 
 def validate_match(d):
@@ -35,10 +36,13 @@ def validate_match(d):
     except Exception:
         raise ValueError("التاريخ خاصو يكون بصيغة YYYY-MM-DD")
     for key in ("home_goals", "away_goals", "ht_home_goals", "ht_away_goals"):
+        if d.get(key) in (None, "") and key.startswith("ht_"):
+            continue
         value = int(d[key])
         if value < 0:
             raise ValueError("عدد الأهداف لا يمكن أن يكون سالباً")
-    if int(d["ht_home_goals"]) > int(d["home_goals"]) or int(d["ht_away_goals"]) > int(d["away_goals"]):
+    if ((d.get("ht_home_goals") not in (None, "") and int(d["ht_home_goals"]) > int(d["home_goals"])) or
+        (d.get("ht_away_goals") not in (None, "") and int(d["ht_away_goals"]) > int(d["away_goals"]))):
         raise ValueError("أهداف الشوط الأول لا يمكن أن تتجاوز أهداف المباراة")
     if not d["home_team"].strip() or not d["away_team"].strip():
         raise ValueError("اسم الفريقين مطلوب")

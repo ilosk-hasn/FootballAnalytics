@@ -23,16 +23,16 @@ CREATE TABLE IF NOT EXISTS matches (
     away_team_id INTEGER NOT NULL,
     home_goals INTEGER NOT NULL CHECK(home_goals >= 0),
     away_goals INTEGER NOT NULL CHECK(away_goals >= 0),
-    ht_home_goals INTEGER NOT NULL CHECK(ht_home_goals >= 0),
-    ht_away_goals INTEGER NOT NULL CHECK(ht_away_goals >= 0),
+    ht_home_goals INTEGER CHECK(ht_home_goals IS NULL OR ht_home_goals >= 0),
+    ht_away_goals INTEGER CHECK(ht_away_goals IS NULL OR ht_away_goals >= 0),
     notes TEXT DEFAULT '',
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(competition_id) REFERENCES competitions(id),
     FOREIGN KEY(home_team_id) REFERENCES teams(id),
     FOREIGN KEY(away_team_id) REFERENCES teams(id),
     CHECK(home_team_id != away_team_id),
-    CHECK(ht_home_goals <= home_goals),
-    CHECK(ht_away_goals <= away_goals)
+    CHECK(ht_home_goals IS NULL OR ht_home_goals <= home_goals),
+    CHECK(ht_away_goals IS NULL OR ht_away_goals <= away_goals)
 );
 CREATE INDEX IF NOT EXISTS idx_matches_date ON matches(match_date);
 CREATE INDEX IF NOT EXISTS idx_matches_home ON matches(home_team_id);
