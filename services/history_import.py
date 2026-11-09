@@ -7,12 +7,13 @@ from __future__ import annotations
 
 import json
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-from database.repository import add_match, list_matches
+from database.repository import add_match, match_identity_rows
 
 BASE = "https://site.api.espn.com/apis/site/v2/sports/soccer/{league}"
 USER_AGENT = "FootballAnalytics/2.0 (historical match importer)"
@@ -174,7 +175,9 @@ def import_both(league, home_name, away_name, count=20, progress=None):
             events = _schedule(league, team["id"], count)
             found = 0
             for event in events:
-                record = _event_record(event, team["id"], league)
+                # Build the scoreboard record first; summary calls are deferred
+                # until overlapping team schedules have been deduplicated.
+                record = _event_record(event, team["id"], league, summaries=False)
                 if record:
                     candidates[event.get("id")] = record
                     found += 1
@@ -183,7 +186,27 @@ def import_both(league, home_name, away_name, count=20, progress=None):
             if found < count: errors.append(f"{label}: المتاح {found} من {count} مباراة في سجل المصدر.")
         except Exception as exc:
             errors.append(f"{label}: {exc}")
-    existing = {(m["match_date"], _norm(m["home_team"]), _norm(m["away_team"])) for m in list_matches(100000)}
+    # Fetch each event summary once, with bounded concurrency. The old loop made
+    # up to 40 serial HTTP calls (each with an 18s timeout) for 40 fixtures.
+    existing = {(m["match_date"], _norm(m["home_team"]), _norm(m["away_team"]))
+                for m in match_identity_rows()}
+    pending_summaries = [event_id for event_id, record in candidates.items()
+                         if (record["match_date"], _norm(record["home_team"]), _norm(record["away_team"]))
+                         not in existing]
+    summary_url = BASE.format(league=league) + "/summary?"
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        futures = {pool.submit(_get, summary_url + urlencode({"event": event_id})): event_id
+                   for event_id in pending_summaries}
+        for future in as_completed(futures):
+            event_id = futures[future]
+            try:
+                candidates[event_id]["notes"] = json.dumps(
+                    _summary_fields(future.result()), ensure_ascii=False)
+            except Exception as exc:
+                facts = json.loads(candidates[event_id]["notes"])
+                facts["summary_error"] = str(exc)
+                candidates[event_id]["notes"] = json.dumps(facts, ensure_ascii=False)
+
     added, skipped = 0, 0
     for record in sorted(candidates.values(), key=lambda x: x["match_date"], reverse=True):
         key = (record["match_date"], _norm(record["home_team"]), _norm(record["away_team"]))

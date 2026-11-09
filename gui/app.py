@@ -19,7 +19,7 @@ class FootballAnalyticsApp(ctk.CTk):
     def __init__(self):
         super().__init__()
         initialize()
-        self.title("FootballAnalytics v2.0")
+        self.title("FootballAnalytics v2.1")
         self.geometry("1180x760")
         self.minsize(980, 650)
         self.grid_columnconfigure(1, weight=1)
@@ -33,7 +33,7 @@ class FootballAnalyticsApp(ctk.CTk):
         side = ctk.CTkFrame(self, width=210, corner_radius=0)
         side.grid(row=0, column=0, sticky="nsew")
         side.grid_propagate(False)
-        ctk.CTkLabel(side, text="⚽ FootballAnalytics v2.0", font=ctk.CTkFont(size=20, weight="bold")).pack(padx=15,pady=(28,30))
+        ctk.CTkLabel(side, text="⚽ FootballAnalytics v2.1", font=ctk.CTkFont(size=20, weight="bold")).pack(padx=15,pady=(28,30))
         for label, callback in [
             ("لوحة التحكم", self.show_dashboard), ("إضافة مباراة", self.show_add),
             ("المباريات", self.show_matches), ("التحليل والتوقعات", self.show_analysis),
@@ -117,14 +117,40 @@ class FootballAnalyticsApp(ctk.CTk):
             ctk.CTkLabel(self.content,text="أضف مباريات كافية وفريقين على الأقل لبدء التحليل.").pack(pady=30); return
         area=ctk.CTkFrame(self.content); area.pack(fill="x",padx=22,pady=12)
         home=ctk.StringVar(value=teams[0]); away=ctk.StringVar(value=teams[1])
-        ctk.CTkLabel(area,text="المضيف").grid(row=0,column=0,padx=10,pady=10)
-        ctk.CTkOptionMenu(area,values=teams,variable=home).grid(row=1,column=0,padx=10,pady=8)
-        ctk.CTkLabel(area,text="الضيف").grid(row=0,column=1,padx=10,pady=10)
-        ctk.CTkOptionMenu(area,values=teams,variable=away).grid(row=1,column=1,padx=10,pady=8)
+        def team_picker(column, label, selected):
+            picker=ctk.CTkFrame(area,fg_color="transparent")
+            picker.grid(row=0,column=column,sticky="ew",padx=10,pady=8)
+            ctk.CTkLabel(picker,text=label).pack(anchor="w",pady=(0,5))
+            search=ctk.CTkEntry(picker,height=36,placeholder_text="ابحث عن اسم الفريق...")
+            search.pack(fill="x")
+            search.insert(0,selected.get())
+            suggestions=ctk.CTkFrame(picker,fg_color="transparent")
+            suggestions.pack(fill="x",pady=(3,0))
+            def choose(name):
+                selected.set(name)
+                search.delete(0,"end"); search.insert(0,name)
+                for child in suggestions.winfo_children(): child.destroy()
+            def update_suggestions(_event=None):
+                query=search.get().strip().casefold()
+                selected.set("")
+                for child in suggestions.winfo_children(): child.destroy()
+                if not query: return
+                matches=[name for name in teams if query in name.casefold()][:6]
+                if not matches:
+                    ctk.CTkLabel(suggestions,text="لا توجد فرق مطابقة",text_color="gray").pack(anchor="w")
+                    return
+                for name in matches:
+                    ctk.CTkButton(suggestions,text=name,height=30,anchor="w",command=lambda value=name: choose(value)).pack(fill="x",pady=1)
+            search.bind("<KeyRelease>",update_suggestions)
+            return picker
+        team_picker(0,"المضيف",home)
+        team_picker(1,"الضيف",away)
+        area.grid_columnconfigure((0,1),weight=1)
         output=ctk.CTkTextbox(self.content,height=360); output.pack(fill="both",expand=True,padx=22,pady=12)
         def run():
             output.delete("1.0","end")
             try:
+                if not home.get() or not away.get(): raise ValueError("ابحث عن الفريقين واختر كل فريق من الاقتراحات")
                 if home.get()==away.get(): raise ValueError("اختَر فريقين مختلفين")
                 matches=list_matches(10000)
                 result=analyze(matches,home.get(),away.get())
